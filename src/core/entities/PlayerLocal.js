@@ -19,7 +19,8 @@ const BACKWARD = new THREE.Vector3(0, 0, 1)
 const SCALE_IDENTITY = new THREE.Vector3(1, 1, 1)
 const POINTER_LOOK_SPEED = 0.1
 const PAN_LOOK_SPEED = 0.4
-const ZOOM_SPEED = 2
+const KEY_TURN_SPEED = 2.5 // rad/s — A/D and arrow left/right
+const ZOOM_SPEED = 1
 const MIN_ZOOM = 0
 const MAX_ZOOM = 8
 const STICK_OUTER_RADIUS = 50
@@ -319,6 +320,36 @@ export class PlayerLocal extends Entity {
     this.control.camera.zoom = this.cam.zoom
     // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
     // this.control.setActions([{ type: 'escape', label: 'Menu' }])
+    this.dragLookRay = new THREE.Raycaster()
+    this.dragLookNDC = new THREE.Vector2()
+    this.dragLookOrigin = new THREE.Vector3()
+    this.dragLookDir = new THREE.Vector3()
+    this.dragLooking = false
+    this.control.mouseLeft.onPress = () => {
+      // console.log('[dragLook] mouseLeft press; isXR=', this.isXR)
+      if (this.isXR) return
+      const coords = this.control.pointer.coords
+      this.dragLookNDC.x = coords.x * 2 - 1
+      this.dragLookNDC.y = -(coords.y * 2 - 1)
+      this.dragLookRay.setFromCamera(this.dragLookNDC, this.world.camera)
+      this.dragLookOrigin.copy(this.dragLookRay.ray.origin)
+      this.dragLookDir.copy(this.dragLookRay.ray.direction)
+      const hit = this.world.physics.raycast(this.dragLookOrigin, this.dragLookDir, 100, Layers.player.group)
+      // console.log('[dragLook] raycast hit=', hit, 'selfId=', this.data.id, 'hitPlayerId=', hit?.handle?.playerId)
+      if (hit && hit.handle?.playerId === this.data.id) {
+        // console.log('[dragLook] locking pointer')
+        this.control.pointer.lock()
+        this.dragLooking = true
+        return true // capture
+      }
+    }
+    this.control.mouseLeft.onRelease = () => {
+      // console.log('[dragLook] mouseLeft release; dragLooking=', this.dragLooking)
+      if (this.dragLooking) {
+        if (!this.firstPerson) this.control.pointer.unlock()
+        this.dragLooking = false
+      }
+    }
   }
 
   onXRSession = session => {
@@ -518,8 +549,8 @@ export class PlayerLocal extends Entity {
         origin.y += this.groundSweepRadius + 0.12 // move up inside player + a bit
         const direction = DOWN
         const maxDistance = 0.12 + 0.1 // outside player + a bit more
-        const hitMask = Layers.environment.group | Layers.prop.group
-        sweepHit = this.world.physics.sweep(geometry, origin, direction, maxDistance, hitMask)
+        const hitMask = Layers.environment.group | Layers.prop.group | Layers.player.group
+        sweepHit = this.world.physics.sweep(geometry, origin, direction, maxDistance, hitMask, this.capsule)
       }
 
       // update grounded info
@@ -657,6 +688,24 @@ export class PlayerLocal extends Entity {
       if (this.slipping) {
         // increase downward velocity to prevent sliding upward when walking at a slope
         velocity.y -= 0.5
+      }
+
+      // sustained push against remote players via contact set
+      if (this.capsuleHandle.contactedHandles.size > 0) {
+        for (const otherHandle of this.capsuleHandle.contactedHandles) {
+          if (!otherHandle.playerId || otherHandle.playerId === this.data.id) continue
+          const other = this.world.entities.get(otherHandle.playerId)
+          if (!other?.isRemote) continue
+          const dx = this.base.position.x - other.base.position.x
+          const dy = this.base.position.y - other.base.position.y
+          const dz = this.base.position.z - other.base.position.z
+          const hLen = Math.sqrt(dx * dx + dz * dz)
+          if (hLen < 0.01) continue
+          // skip vertical stacks (standing on head or being stood on) so heads remain standable
+          if (Math.abs(dy) > 0.8) continue
+          const pushAmount = 0.12
+          this.push([(dx / hLen) * pushAmount, 0, (dz / hLen) * pushAmount])
+        }
       }
 
       // apply additional push force
@@ -855,10 +904,12 @@ export class PlayerLocal extends Entity {
       this.cam.zoom = 0
       this.firstPerson = true
       this.avatar.visible = false
+      this.control.pointer.lock()
     } else if (this.cam.zoom > 0 && this.firstPerson) {
       this.cam.zoom = 1
       this.firstPerson = false
       this.avatar.visible = true
+      if (!this.dragLooking) this.control.pointer.unlock()
     }
 
     // stick movement threshold
@@ -901,8 +952,21 @@ export class PlayerLocal extends Entity {
       // otherwise use keyboard
       if (this.control.keyW.down || this.control.arrowUp.down) this.moveDir.z -= 1
       if (this.control.keyS.down || this.control.arrowDown.down) this.moveDir.z += 1
-      if (this.control.keyA.down || this.control.arrowLeft.down) this.moveDir.x -= 1
-      if (this.control.keyD.down || this.control.arrowRight.down) this.moveDir.x += 1
+      this.turning = false
+      if (this.dragLooking) {
+        // while mouse-dragging the camera, A/D strafes
+        if (this.control.keyA.down || this.control.arrowLeft.down) this.moveDir.x -= 1
+        if (this.control.keyD.down || this.control.arrowRight.down) this.moveDir.x += 1
+      } else {
+        if (this.control.keyA.down || this.control.arrowLeft.down) {
+          this.cam.rotation.y += KEY_TURN_SPEED * delta
+          this.turning = true
+        }
+        if (this.control.keyD.down || this.control.arrowRight.down) {
+          this.cam.rotation.y -= KEY_TURN_SPEED * delta
+          this.turning = true
+        }
+      }
     }
 
     // we're moving if direction is set
@@ -984,7 +1048,7 @@ export class PlayerLocal extends Entity {
     }
     if (this.data.effect?.turn) {
       applyRotY = true
-    } else if (this.moving || this.firstPerson) {
+    } else if (this.moving || this.firstPerson || this.turning) {
       applyRotY = true
     }
 

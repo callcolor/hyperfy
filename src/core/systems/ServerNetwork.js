@@ -290,12 +290,15 @@ export class ServerNetwork extends System {
         ai: this.world.ai.serialize(),
         blueprints: this.world.blueprints.serialize(),
         entities: this.world.entities.serialize(),
+        spawn: this.spawn,
         livekit,
         authToken,
         hasAdminCode: !!process.env.ADMIN_CODE,
       })
 
       this.sockets.set(socket.id, socket)
+
+      console.log(`[connect] ${socket.player.data.name} (${this.sockets.size} ${this.sockets.size === 1 ? 'player' : 'players'} online)`)
 
       // enter events on the server are sent after the snapshot.
       // on the client these are sent during PlayerRemote.js entity instantiation!
@@ -501,7 +504,7 @@ export class ServerNetwork extends System {
     const entity = this.world.entities.get(id)
     this.world.entities.remove(id)
     this.send('entityRemoved', id, socket.id)
-    if (entity.isApp) this.dirtyApps.add(id)
+    if (entity?.isApp) this.dirtyApps.add(id)
   }
 
   onSettingsModified = (socket, data) => {
@@ -567,7 +570,9 @@ export class ServerNetwork extends System {
 
   onDisconnect = (socket, code) => {
     this.world.livekit.clearModifiers(socket.id)
+    const name = socket.player?.data?.name
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
+    console.log(`[disconnect] ${name} (${this.sockets.size} ${this.sockets.size === 1 ? 'player' : 'players'} online)`)
   }
 }

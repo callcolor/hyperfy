@@ -62,28 +62,29 @@ export class Scripts extends System {
     })
   }
 
-  evaluate(code) {
+  evaluate(code, url) {
     let value
     const result = {
       exec: (...args) => {
-        if (!value) value = this.compartment.evaluate(wrapRawCode(code))
+        if (!value) value = this.compartment.evaluate(wrapRawCode(code, url))
         return value(...args)
       },
       code,
+      url,
     }
     return result
   }
 }
 
+// Number of wrapper lines inserted before the user's code. Used by App.js to translate
+// stack-trace line numbers back to the user's source. MUST stay in sync with wrapRawCode.
+export const SCRIPT_USER_LINE_OFFSET = 1
+
 // NOTE: config is deprecated and renamed to props
-function wrapRawCode(code) {
-  return `
-  (function() {
-    const shared = {}
-    return (world, app, fetch, props, setTimeout) => {
-      const config = props // deprecated
-      ${code}
-    }
-  })()
-  `
+// NOTE: keep the wrapper prefix on a single line so the line offset remains exactly 1.
+function wrapRawCode(code, url) {
+  const prefix = `(function(){const shared={};return(world,app,fetch,props,setTimeout)=>{const config=props;`
+  const suffix = `\n}})()`
+  const sourceURL = url ? `\n//# sourceURL=${url}` : ''
+  return `${prefix}\n${code}${suffix}${sourceURL}`
 }

@@ -441,4 +441,11 @@ const migrations = [
       await trx.schema.renameTable('_config_new', 'config')
     })
   },
+  // add discordId to users (for Discord Activities identity linking)
+  async db => {
+    await db.schema.alterTable('users', table => {
+      table.string('discordId').nullable()
+      table.index('discordId')
+    })
+  },
 ]

@@ -9,6 +9,7 @@ import {
   CodeIcon,
   DownloadIcon,
   EarthIcon,
+  HomeIcon,
   UsersIcon,
   InfoIcon,
   LayersIcon,
@@ -126,56 +127,14 @@ export function Sidebar({ world, ui }) {
         <div className='sidebar-sections'>
           <Section active={activePane} bottom>
             <Btn
-              active={activePane === 'prefs'}
-              suspended={ui.pane === 'prefs' && !activePane}
-              onClick={() => world.ui.togglePane('prefs')}
+              onClick={() => {
+                const spawn = world.network.spawn
+                if (!spawn) return
+                player.teleport({ position: spawn.position })
+              }}
             >
-              <MenuIcon size='1.25rem' />
+              <HomeIcon size='1.25rem' />
             </Btn>
-            <Btn
-              active={activePane === 'players'}
-              suspended={ui.pane === 'players' && !activePane}
-              onClick={() => world.ui.togglePane('players')}
-            >
-              <UsersIcon size='1.25rem' />
-            </Btn>
-            {isTouch && (
-              <Btn
-                onClick={() => {
-                  world.emit('sidebar-chat-toggle')
-                }}
-              >
-                <MessageSquareTextIcon size='1.25rem' />
-              </Btn>
-            )}
-            {livekit.available && !livekit.connected && (
-              <Btn disabled>
-                <MicOffIcon size='1.25rem' />
-              </Btn>
-            )}
-            {livekit.available && livekit.connected && (
-              <Btn
-                muted={livekit.mic && (livekit.level === 'disabled' || livekit.muted)}
-                onClick={() => {
-                  world.livekit.setMicrophoneEnabled()
-                }}
-              >
-                {livekit.mic && livekit.level !== 'disabled' && !livekit.muted ? (
-                  <MicIcon size='1.25rem' />
-                ) : (
-                  <MicOffIcon size='1.25rem' />
-                )}
-              </Btn>
-            )}
-            {world.xr.supportsVR && (
-              <Btn
-                onClick={() => {
-                  world.xr.enter()
-                }}
-              >
-                <VRIcon size='1.25rem' />
-              </Btn>
-            )}
           </Section>
           {isBuilder && (
             <Section active={activePane} top bottom>

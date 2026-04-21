@@ -227,7 +227,7 @@ export class ClientLoader extends System {
       }
       if (type === 'script') {
         const code = await file.text()
-        const script = this.world.scripts.evaluate(code)
+        const script = this.world.scripts.evaluate(code, url)
         this.results.set(key, script)
         return script
       }
@@ -336,7 +336,7 @@ export class ClientLoader extends System {
       promise = new Promise(async (resolve, reject) => {
         try {
           const code = await file.text()
-          const script = this.world.scripts.evaluate(code)
+          const script = this.world.scripts.evaluate(code, url)
           this.results.set(key, script)
           resolve(script)
         } catch (err) {

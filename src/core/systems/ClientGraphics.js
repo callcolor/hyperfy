@@ -148,8 +148,10 @@ export class ClientGraphics extends System {
 
   render() {
     if (this.renderer.xr.isPresenting || !this.usePostprocessing) {
+      this.renderer.autoClear = true
       this.renderer.render(this.world.stage.scene, this.world.camera)
     } else {
+      this.renderer.autoClear = false
       this.composer.render()
     }
     if (this.xrDimensionsNeeded) {

@@ -9,3 +9,5 @@ build/
 /world*
 TODO*.md
 compose.dev.yaml
+*.local
+test/

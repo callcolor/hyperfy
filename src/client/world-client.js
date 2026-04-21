@@ -9,7 +9,7 @@ import { CoreUI } from './components/CoreUI'
 
 export { System } from '../core/systems/System'
 
-export function Client({ wsUrl, onSetup }) {
+export function Client({ wsUrl, name, onSetup }) {
   const viewportRef = useRef()
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
@@ -40,7 +40,7 @@ export function Client({ wsUrl, onSetup }) {
         wsUrl = wsUrl()
         if (wsUrl instanceof Promise) wsUrl = await wsUrl
       }
-      const config = { viewport, ui, wsUrl, baseEnvironment }
+      const config = { viewport, ui, wsUrl, name, baseEnvironment }
       onSetup?.(world, config)
       world.init(config)
     }

@@ -11,6 +11,7 @@ import { getRef } from '../nodes/Node'
 import { Layers } from '../extras/Layers'
 import { createPlayerProxy } from '../extras/createPlayerProxy'
 import { serializeError } from '../extras/serializeError'
+import { SCRIPT_USER_LINE_OFFSET } from '../systems/Scripts'
 
 const hotEventNames = ['fixedUpdate', 'update', 'animate', 'lateUpdate']
 
@@ -24,6 +25,18 @@ const Modes = {
 let safeMode = false
 if (typeof window !== 'undefined') {
   safeMode = new URLSearchParams(window.location.search).get('safemode')
+}
+
+// Script code is evaluated inside a compartment-provided anonymous source, so stack frames
+// appear as `<anonymous>:LINE:COL`. Pull the first such frame and translate to user-source line.
+function extractUserScriptLocation(err) {
+  const stack = err?.stack
+  if (typeof stack !== 'string') return null
+  const match = stack.match(/<anonymous>:(\d+):(\d+)/)
+  if (!match) return null
+  const line = parseInt(match[1], 10) - SCRIPT_USER_LINE_OFFSET
+  if (!Number.isFinite(line) || line < 1) return null
+  return { line, col: parseInt(match[2], 10) }
 }
 
 export class App extends Entity {
@@ -143,7 +156,9 @@ export class App extends Entity {
         this.scriptError = null
       } catch (err) {
         this.scriptError = serializeError(err)
-        console.error('script crashed')
+        const scriptUrl = blueprint.script || '(inline)'
+        const loc = extractUserScriptLocation(err)
+        console.error(`script crashed: ${scriptUrl}${loc ? ` at line ${loc.line}:${loc.col}` : ''}`)
         console.error(err)
         return this.crash()
       }
@@ -284,7 +299,7 @@ export class App extends Entity {
     }
     if (data.hasOwnProperty('position')) {
       this.data.position = data.position
-      if (this.data.mover) {
+      if (this.data.mover && this.networkPos) {
         this.networkPos.pushArray(data.position)
       } else {
         rebuild = true
@@ -292,7 +307,7 @@ export class App extends Entity {
     }
     if (data.hasOwnProperty('quaternion')) {
       this.data.quaternion = data.quaternion
-      if (this.data.mover) {
+      if (this.data.mover && this.networkQuat) {
         this.networkQuat.pushArray(data.quaternion)
       } else {
         rebuild = true
@@ -300,7 +315,7 @@ export class App extends Entity {
     }
     if (data.hasOwnProperty('scale')) {
       this.data.scale = data.scale
-      if (this.data.mover) {
+      if (this.data.mover && this.networkSca) {
         this.networkSca.pushArray(data.scale)
       } else {
         rebuild = true

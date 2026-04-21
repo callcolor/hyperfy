@@ -169,7 +169,7 @@ export class ServerLoader extends System {
       promise = new Promise(async (resolve, reject) => {
         try {
           const code = await this.fetchText(url)
-          const script = this.world.scripts.evaluate(code)
+          const script = this.world.scripts.evaluate(code, url)
           this.results.set(key, script)
           resolve(script)
         } catch (err) {

@@ -18,8 +18,18 @@ export class XR extends System {
   }
 
   async init() {
-    this.supportsVR = await navigator.xr?.isSessionSupported('immersive-vr')
-    this.supportsAR = await navigator.xr?.isSessionSupported('immersive-ar')
+    // navigator.xr may exist but throw if Permissions Policy disallows xr
+    // (e.g. inside the Discord Activity iframe). Catch and fall back to false.
+    try {
+      this.supportsVR = await navigator.xr?.isSessionSupported('immersive-vr')
+    } catch (err) {
+      this.supportsVR = false
+    }
+    try {
+      this.supportsAR = await navigator.xr?.isSessionSupported('immersive-ar')
+    } catch (err) {
+      this.supportsAR = false
+    }
   }
 
   async enter() {

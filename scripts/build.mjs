@@ -58,6 +58,10 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
             const physxWasmSrc = path.join(rootDir, 'src/core/physx-js-webidl.wasm')
             const physxWasmDest = path.join(rootDir, 'build/public/physx-js-webidl.wasm')
             await fs.copy(physxWasmSrc, physxWasmDest)
+            // self-host Monaco editor so it works inside Discord Activity's strict CSP
+            const monacoSrc = path.join(rootDir, 'node_modules/monaco-editor/min/vs')
+            const monacoDest = path.join(rootDir, 'build/public/monaco/vs')
+            await fs.copy(monacoSrc, monacoDest)
             // find js output files
             const metafile = result.metafile
             const outputFiles = Object.keys(metafile.outputs)

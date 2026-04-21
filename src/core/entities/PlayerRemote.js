@@ -40,6 +40,17 @@ export class PlayerRemote extends Entity {
     })
     this.body.add(this.collider)
 
+    // flat head platform so other players can stand on top of this avatar
+    this.headPlatform = createNode('collider', {
+      type: 'box',
+      width: 0.6,
+      height: 0.1,
+      depth: 0.6,
+      layer: 'player',
+    })
+    this.headPlatform.position.set(0, 1.85, 0)
+    this.body.add(this.headPlatform)
+
     // this.caps = createNode('mesh', {
     //   type: 'geometry',
     //   geometry: capsuleGeometry,

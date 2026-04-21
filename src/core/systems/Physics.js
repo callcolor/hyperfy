@@ -409,6 +409,9 @@ export class Physics extends System {
         // delete data
         this.handles.delete(actor.ptr)
       },
+      get contactedHandles() {
+        return handle.contactedHandles
+      },
     }
   }
 
@@ -496,7 +499,7 @@ export class Physics extends System {
     // TODO: this.raycastResult.destroy() on this.destroy()
   }
 
-  sweep(geometry, origin, direction, maxDistance, layerMask) {
+  sweep(geometry, origin, direction, maxDistance, layerMask, excludeActor) {
     origin.toPxVec3(this.sweepPose.p)
     direction = direction.toPxVec3(this._pv2)
     this.queryFilterData.data.word0 = layerMask
@@ -512,13 +515,16 @@ export class Physics extends System {
     )
     if (didHit) {
       const numHits = this.sweepResult.getNbAnyHits()
+      const excludePtr = excludeActor?.ptr
       let hit
       for (let n = 0; n < numHits; n++) {
         const nHit = this.sweepResult.getAnyHit(n)
+        if (excludePtr && nHit.actor?.ptr === excludePtr) continue
         if (!hit || hit.distance > nHit.distance) {
           hit = nHit
         }
       }
+      if (!hit) return
       _sweepHit.actor = hit.actor
       _sweepHit.point.set(hit.position.x, hit.position.y, hit.position.z)
       _sweepHit.normal.set(hit.normal.x, hit.normal.y, hit.normal.z)

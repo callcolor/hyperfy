@@ -75,6 +75,7 @@ export class ClientBuilder extends System {
   start() {
     this.control = this.world.controls.bind({ priority: ControlPriorities.BUILDER })
     this.control.mouseLeft.onPress = () => {
+      if (!this.enabled) return
       // pointer lock requires user-gesture in safari
       // so this can't be done during update cycle
       if (!this.control.pointer.locked) {
@@ -624,7 +625,10 @@ export class ClientBuilder extends System {
     enabled = isBoolean(enabled) ? enabled : !this.enabled
     if (this.enabled === enabled) return
     this.enabled = enabled
-    if (!this.enabled) this.select(null)
+    if (!this.enabled) {
+      this.select(null)
+      if (this.control.pointer.locked) this.control.pointer.unlock()
+    }
     this.updateActions()
     this.world.emit('build-mode', enabled)
   }
@@ -1177,7 +1181,7 @@ export class ClientBuilder extends System {
       preload: false,
       public: false,
       locked: false,
-      unique: false,
+      unique: true,
       scene: false,
       disabled: false,
     }
@@ -1237,7 +1241,7 @@ export class ClientBuilder extends System {
           preload: false,
           public: false,
           locked: false,
-          unique: false,
+          unique: true,
           scene: false,
           disabled: false,
         }

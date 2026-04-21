@@ -1,8 +1,6 @@
-import moment from 'moment'
 import { emoteUrls } from '../extras/playerEmotes'
 import { readPacket, writePacket } from '../packets'
 import { storage } from '../storage'
-import { uuid } from '../utils'
 import { hashFile } from '../utils-client'
 import { System } from './System'
 
@@ -25,6 +23,7 @@ export class ClientNetwork extends System {
   }
 
   init({ wsUrl, name, avatar }) {
+    this.reloadTimer = null
     const authToken = storage.get('authToken')
     let url = `${wsUrl}?authToken=${authToken}`
     if (name) url += `&name=${encodeURIComponent(name)}`
@@ -94,9 +93,14 @@ export class ClientNetwork extends System {
   onSnapshot(data) {
     this.id = data.id
     this.serverTimeOffset = data.serverTime - performance.now()
-    this.apiUrl = data.apiUrl
+    this.spawn = data.spawn
+    // Inside the Discord iframe, server-provided URLs (pointing at our origin)
+    // are CSP-blocked. Override with the iframe's own origin so requests go
+    // through Discord's URL-mapping proxy.
+    const inDiscord = typeof window !== 'undefined' && window.location.hostname.endsWith('.discordsays.com')
+    this.apiUrl = inDiscord ? `${window.location.origin}/api` : data.apiUrl
     this.maxUploadSize = data.maxUploadSize
-    this.world.assetsUrl = data.assetsUrl
+    this.world.assetsUrl = inDiscord ? `${window.location.origin}/assets` : data.assetsUrl
 
     // preload environment model and avatar
     // if (this.world.environment.base) {
@@ -214,18 +218,19 @@ export class ClientNetwork extends System {
   }
 
   onClose = code => {
-    this.world.chat.add({
-      id: uuid(),
-      from: null,
-      fromId: null,
-      body: `You have been disconnected.`,
-      createdAt: moment().toISOString(),
-    })
-    this.world.emit('disconnect', code || true)
     console.log('disconnect', code)
+    this.world.emit('disconnect', code || true)
+    // Rather than reconnecting the websocket (which would leave stale entities,
+    // blueprints, and scripts from the prior session in the world), reload the
+    // page. The Disconnected overlay stays visible during the delay.
+    this.reloadTimer = setTimeout(() => window.location.reload(), 1000)
   }
 
   destroy() {
+    if (this.reloadTimer) {
+      clearTimeout(this.reloadTimer)
+      this.reloadTimer = null
+    }
     if (this.ws) {
       this.ws.removeEventListener('message', this.onPacket)
       this.ws.removeEventListener('close', this.onClose)

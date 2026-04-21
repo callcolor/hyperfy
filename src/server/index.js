@@ -11,12 +11,16 @@ import compress from '@fastify/compress'
 import statics from '@fastify/static'
 import multipart from '@fastify/multipart'
 
+import moment from 'moment'
+
 import { createServerWorld } from '../core/createServerWorld'
 import { getDB } from './db'
 import { Storage } from './Storage'
 import { assets } from './assets'
 import { collections } from './collections'
 import { cleaner } from './cleaner'
+import { createJWT } from '../core/utils-server'
+import { uuid } from '../core/utils'
 
 const rootDir = path.join(__dirname, '../')
 const worldDir = path.join(rootDir, process.env.WORLD)
@@ -170,6 +174,89 @@ fastify.post('/api/upload', async (req, reply) => {
 fastify.get('/api/upload-check', async (req, reply) => {
   const exists = await assets.exists(req.query.filename)
   return { exists }
+})
+
+// Discord Activities OAuth2 token exchange.
+// Client sends the authorization code it got from discordSdk.commands.authorize(),
+// we exchange it for an access token, look up the Discord user, upsert a Hyperfy
+// user keyed by discordId, and hand back a Hyperfy authToken (JWT) the client can
+// use for the WebSocket connection.
+fastify.post('/api/discord/token', async (req, reply) => {
+  const clientId = process.env.PUBLIC_DISCORD_CLIENT_ID
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    return reply.code(501).send({ error: 'discord_not_configured' })
+  }
+  const code = req.body?.code
+  const redirectUri = req.body?.redirect_uri
+  if (!code) {
+    return reply.code(400).send({ error: 'missing_code' })
+  }
+  if (!redirectUri) {
+    return reply.code(400).send({ error: 'missing_redirect_uri' })
+  }
+  // exchange code for access token — redirect_uri must match the one the
+  // client passed to discordSdk.commands.authorize()
+  const tokenResp = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+    }),
+  })
+  if (!tokenResp.ok) {
+    const text = await tokenResp.text()
+    console.error('[discord] token exchange failed:', tokenResp.status, text)
+    return reply.code(502).send({ error: 'token_exchange_failed' })
+  }
+  const tokenData = await tokenResp.json()
+  const accessToken = tokenData.access_token
+  // fetch the Discord user
+  const userResp = await fetch('https://discord.com/api/users/@me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!userResp.ok) {
+    const text = await userResp.text()
+    console.error('[discord] user fetch failed:', userResp.status, text)
+    return reply.code(502).send({ error: 'user_fetch_failed' })
+  }
+  const discordUser = await userResp.json()
+  // Resolve the in-world display name: prefer the per-guild server nickname,
+  // fall back to the account-wide global_name. We deliberately skip the raw
+  // username. If the Activity was launched outside a guild (DM/group DM),
+  // sdk.guildId is null and we skip the member fetch.
+  const guildId = req.body?.guild_id
+  let serverNick = null
+  if (guildId) {
+    const memberResp = await fetch(`https://discord.com/api/users/@me/guilds/${guildId}/member`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (memberResp.ok) {
+      const member = await memberResp.json()
+      serverNick = member.nick || null
+    } else {
+      console.warn('[discord] member fetch failed:', memberResp.status, await memberResp.text())
+    }
+  }
+  const displayName = serverNick || discordUser.global_name || 'Discord User'
+  let user = await db('users').where('discordId', discordUser.id).first()
+  if (!user) {
+    user = {
+      id: uuid(),
+      name: displayName,
+      avatar: null,
+      rank: 0,
+      createdAt: moment().toISOString(),
+      discordId: discordUser.id,
+    }
+    await db('users').insert(user)
+  }
+  const authToken = await createJWT({ userId: user.id })
+  return { access_token: accessToken, authToken, name: displayName }
 })
 
 fastify.get('/health', async (request, reply) => {

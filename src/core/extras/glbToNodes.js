@@ -5,6 +5,33 @@ import CustomShaderMaterial from '../libs/three-custom-shader-material'
 const groupTypes = ['Scene', 'Group', 'Object3D']
 
 export function glbToNodes(glb, world) {
+  // Pre-pass: identify each rig's subtree. For every skeleton in the scene,
+  // the "rig root" is the nearest common ancestor (within glb.scene) of its
+  // SkinnedMeshes plus every one of its bones. Cloning that subtree keeps
+  // bones parented (so their matrixWorld stays live) and ensures
+  // SkeletonUtils.clone's lookup map contains every bone it needs to map.
+  const rigRoots = new Map() // rigRoot -> { path }
+  const rigSubtreeMember = new Map() // any descendant -> its rigRoot
+  {
+    const skeletons = new Map() // skeleton -> SkinnedMesh[]
+    glb.scene.traverse(n => {
+      if (n.isSkinnedMesh && n.skeleton) {
+        let list = skeletons.get(n.skeleton)
+        if (!list) skeletons.set(n.skeleton, (list = []))
+        list.push(n)
+      }
+    })
+    for (const [skeleton, smeshes] of skeletons) {
+      const nodes = [...smeshes]
+      for (const bone of skeleton.bones) if (bone) nodes.push(bone)
+      const rigRoot = findLCA(nodes, glb.scene)
+      if (!rigRoot) continue
+      const path = pathFromRoot(glb.scene, rigRoot)
+      if (!path) continue
+      rigRoots.set(rigRoot, { path })
+      rigRoot.traverse(child => rigSubtreeMember.set(child, rigRoot))
+    }
+  }
   function registerNode(name, data) {
     const node = createNode(name, data)
     return node
@@ -12,11 +39,17 @@ export function glbToNodes(glb, world) {
   function parse(object3ds, parentNode) {
     for (const object3d of object3ds) {
       const props = object3d.userData || {}
-      const isSkinnedMeshRoot = !!object3d.children.find(c => c.isSkinnedMesh)
-      // SkinnedMesh (root)
-      if (isSkinnedMeshRoot) {
+      // Skip nodes that live inside a rig subtree but aren't its root — the
+      // rig root owns the whole subtree and will be (or was) registered as
+      // one skinnedmesh node.
+      if (rigSubtreeMember.has(object3d) && rigSubtreeMember.get(object3d) !== object3d) continue
+      // SkinnedMesh (rig root)
+      if (rigRoots.has(object3d)) {
+        const { path } = rigRoots.get(object3d)
         const node = registerNode('skinnedmesh', {
           id: object3d.name,
+          sceneRoot: glb.scene,
+          path,
           object3d,
           animations: glb.animations,
           castShadow: props.castShadow,
@@ -31,7 +64,7 @@ export function glbToNodes(glb, world) {
         } else {
           parentNode.add(node)
         }
-        // parse(object3d.children, node)
+        continue
       }
       // Snap (custom node)
       else if (props.node === 'snap') {
@@ -144,6 +177,47 @@ export function glbToNodes(glb, world) {
   parse(glb.scene.children, root)
   // console.log('$root', root)
   return root
+}
+
+// Lowest common ancestor of a set of Object3D nodes within `root`. Returns
+// null if any node isn't reachable from root.
+function findLCA(nodes, root) {
+  if (!nodes.length) return null
+  const chain = []
+  const chainIdx = new Map()
+  let curr = nodes[0]
+  while (curr) {
+    chainIdx.set(curr, chain.length)
+    chain.push(curr)
+    if (curr === root) break
+    curr = curr.parent
+  }
+  if (!chainIdx.has(root)) return null
+  let lcaIdx = 0
+  for (let i = 1; i < nodes.length; i++) {
+    let c = nodes[i]
+    while (c && !chainIdx.has(c)) c = c.parent
+    if (!c) return null
+    const idx = chainIdx.get(c)
+    if (idx > lcaIdx) lcaIdx = idx
+  }
+  return chain[lcaIdx]
+}
+
+// Sequence of child indices from `root` to `target`, suitable for finding
+// the equivalent node after SkeletonUtils.clone (Object3D.clone preserves
+// child order).
+function pathFromRoot(root, target) {
+  if (root === target) return []
+  const path = []
+  let curr = target
+  while (curr !== root) {
+    const parent = curr.parent
+    if (!parent) return null
+    path.unshift(parent.children.indexOf(curr))
+    curr = parent
+  }
+  return path
 }
 
 function addWind(mesh, world) {

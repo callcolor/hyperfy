@@ -5,10 +5,14 @@ lockdown({
   errorTrapping: 'report',
   unhandledRejectionTrapping: 'report',
 
+  // Required for Discord Activities: the embedded-app-sdk reassigns
+  // console.log/warn/error so iframe logs show up in the Discord client's
+  // devtools. SES's default console taming freezes those methods.
+  consoleTaming: 'unsafe',
+
   //
   // regExpTaming: 'unsafe',
   // localeTaming: 'unsafe',
-  // consoleTaming: 'unsafe',
   // evalTaming: 'unsafeEval',
   // // stackFiltering: ''
   // overrideTaming: 'min',

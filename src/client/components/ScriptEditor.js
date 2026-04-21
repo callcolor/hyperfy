@@ -156,16 +156,16 @@ let promise
 const load = () => {
   if (promise) return promise
   promise = new Promise(async resolve => {
-    // init require
+    // init require — Monaco is self-hosted at /monaco/vs so it works inside Discord's iframe CSP
     window.require = {
       paths: {
-        vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.49.0/min/vs',
+        vs: '/monaco/vs',
       },
     }
     // load loader
     await new Promise(resolve => {
       const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.49.0/min/vs/loader.js' // prettier-ignore
+      script.src = '/monaco/vs/loader.js'
       script.onload = () => resolve()
       document.head.appendChild(script)
     })

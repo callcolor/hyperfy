@@ -52,7 +52,7 @@ export class ClientAI extends System {
       preload: false,
       public: false,
       locked: false,
-      unique: false,
+      unique: true,
       disabled: false,
     }
     this.world.blueprints.add(blueprint, true)

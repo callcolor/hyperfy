@@ -21,6 +21,8 @@ export class SkinnedMesh extends Node {
     this.name = 'skinnedmesh'
 
     this._object3d = data.object3d
+    this._sceneRoot = data.sceneRoot
+    this._path = data.path
     this._animations = data.animations
 
     this.castShadow = data.castShadow
@@ -39,7 +41,16 @@ export class SkinnedMesh extends Node {
     this.bones = null
     this.animNames = []
 
-    this.obj = SkeletonUtils.clone(this._object3d)
+    // Clone the entire GLB scene so SkeletonUtils.clone's source→clone lookup
+    // map contains every bone, regardless of whether bones live as siblings
+    // of the skinned mesh (common when exporters wrap multi-primitive meshes
+    // in a Group). Then navigate the cloned scene down our pre-computed
+    // child-index path to extract just the rig subtree.
+    const clonedScene = SkeletonUtils.clone(this._sceneRoot)
+    let obj = clonedScene
+    for (const i of this._path) obj = obj.children[i]
+    this.obj = obj
+
     this.obj.matrixWorld.copy(this.matrixWorld)
     this.obj.matrixAutoUpdate = false
     this.obj.matrixWorldAutoUpdate = false
@@ -93,6 +104,8 @@ export class SkinnedMesh extends Node {
   copy(source, recursive) {
     super.copy(source, recursive)
     this._object3d = source._object3d
+    this._sceneRoot = source._sceneRoot
+    this._path = source._path
     this._animations = source._animations
     this._castShadow = source._castShadow
     this._receiveShadow = source._receiveShadow
